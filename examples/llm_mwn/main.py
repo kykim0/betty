@@ -2,6 +2,7 @@ import argparse
 import copy
 import logging
 import math
+import os
 
 from betty.configs import Config, EngineConfig
 from betty.engine import Engine
@@ -157,13 +158,12 @@ class ReweightingEngine(Engine):
         val_loss = total_loss / num_examples
         if self._best_val_loss > val_loss:
             self._best_val_loss = val_loss
-            output_dir = self.args.output_dir
-            torch.save(self.inner.state_dict(), f"{output_dir}/model_{self.global_step}.pt")
-            torch.save(self.outer.state_dict(), f"{output_dir}/wnet_{self.global_step}.pt")
-        return self._best_val_loss
-
-    def validation_results(self):
-        self._best_val_loss
+            if self.is_rank_zero():
+                output_dir = self.args.output_dir
+                os.makedirs(output_dir, exist_ok=True)
+                torch.save(self.inner.state_dict(), f"{output_dir}/model_{self.global_step}.pt")
+                torch.save(self.outer.state_dict(), f"{output_dir}/wnet_{self.global_step}.pt")
+        return {"loss": val_loss, "best_acc": self._best_val_loss}
 
 
 def main():
@@ -190,34 +190,36 @@ def main():
     data_module = make_data_module(tokenizer, wnet_tokenizer, args)
 
     num_gpus = torch.cuda.device_count()
-    train_batch_size = num_gpus * args.per_device_train_batch_size * args.gradient_accumulation_steps
+    # train_batch_size = num_gpus * args.per_device_train_batch_size * args.gradient_accumulation_steps
+    train_batch_size = 1
     train_dataloader = get_dataloader(
         dataset=data_module["train_dataset"],
         data_collator=data_module["collator"],
         batch_size=train_batch_size,
         group_by_length=args.group_by_length,
     )
-    meta_batch_size = num_gpus * args.per_device_meta_train_batch_size * args.meta_gradient_accumulation_steps
+    # meta_batch_size = num_gpus * args.per_device_meta_train_batch_size * args.meta_gradient_accumulation_steps
+    eval_dataset = data_module["eval_dataset"]
+    dataset = eval_dataset.train_test_split(test_size=0.05, shuffle=True, seed=42)
+    meta_batch_size = 1
     meta_dataloader = get_dataloader(
-        dataset=data_module["eval_dataset"],
+        dataset=dataset["train"],
         data_collator=data_module["collator"],
         batch_size=meta_batch_size,
         group_by_length=args.group_by_length,
     )
-    test_dataloader = copy.deepcopy(meta_dataloader)
+    test_batch_size = 32
+    test_dataloader = get_dataloader(
+        dataset=dataset["test"],
+        data_collator=data_module["collator"],
+        batch_size=test_batch_size,
+        group_by_length=args.group_by_length,
+    )
 
-    # for inputs in train_dataloader:
-    #     print(f"train device: {inputs['input_ids'].device}")
-    #     break
-    # for inputs in meta_dataloader:
-    #     print(f"meta device: {inputs['input_ids'].device}")
-    #     break
-    # for inputs in test_dataloader:
-    #     print(f"test device: {inputs['input_ids'].device}")
-    #     break
-
-    outer_config = Config(type="darts", precision="bf16", log_step=args.logging_steps, retain_graph=True)
-    inner_config = Config(type="darts", precision="bf16", unroll_steps=1)
+    outer_config = Config(type="darts", precision="bf16", log_step=args.logging_steps,
+                          retain_graph=True, gradient_accumulation=args.gradient_accumulation_steps)
+    inner_config = Config(type="darts", precision="bf16", unroll_steps=1,
+                          gradient_accumulation=args.meta_gradient_accumulation_steps)
     args.report_to = args.report_to if args.report_to in ["tensorboard", "wandb", "none"] else "none"
     engine_config = EngineConfig(
         train_iters=args.max_steps,
@@ -241,8 +243,6 @@ def main():
         args, test_dataloader, problems=problems, config=engine_config, dependencies=dependencies
     )
     engine.run()
-    valid_results = engine.valid_results()
-    print(f"Validation results: {valid_results}")
 
 
 if __name__ == "__main__":

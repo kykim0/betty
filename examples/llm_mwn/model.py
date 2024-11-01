@@ -23,14 +23,6 @@ class LMWeightNet(nn.Module):
             torch_dtype=torch.bfloat16,
             device_map="auto",
         )
-        # model = AutoModelForCausalLM.from_pretrained(
-        #     args.model_name_or_path,
-        #     device_map="auto",
-        #     quantization_config=quantization_config,
-        #     torch_dtype=compute_dtype,
-        #     trust_remote_code=args.trust_remote_code,
-        #     use_auth_token=args.use_auth_token,
-        # )
         self.config = self.model.config  # Hack
 
     def forward(

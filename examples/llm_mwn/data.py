@@ -75,7 +75,9 @@ class DataCollatorForCausalLM(object):
         return data_dict
 
     def __call__(self, instances: Sequence[Dict]) -> Dict[str, torch.Tensor]:
-        data_dict = self.process_instances(self.tokenizer, instances)
+        data_dict = {}
+        if self.tokenizer is not None:
+            data_dict = self.process_instances(self.tokenizer, instances)
         if self.wnet_tokenizer is not None:
             wnet_data_dict = self.process_instances(self.wnet_tokenizer, instances)
             data_dict["wnet_input_ids"] = wnet_data_dict["input_ids"]

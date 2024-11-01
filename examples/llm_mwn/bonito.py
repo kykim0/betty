@@ -1,15 +1,12 @@
 
-import importlib
 from typing import Dict
 
 import bitsandbytes as bnb
-from packaging import version
 from peft import LoraConfig, PeftModel, get_peft_model, prepare_model_for_kbit_training
 import torch
 import transformers
 from transformers import (
     AutoModelForCausalLM,
-    AutoModelForSequenceClassification,
     AutoTokenizer,
     BitsAndBytesConfig,
     LlamaTokenizer,
@@ -38,29 +35,6 @@ def find_all_linear_names(args, model):
     return list(lora_module_names)
 
 
-# def is_ipex_available():
-#     def get_major_and_minor_from_version(full_version):
-#         return (
-#             str(version.parse(full_version).major)
-#             + "."
-#             + str(version.parse(full_version).minor)
-#         )
-
-#     _torch_version = importlib.metadata.version("torch")
-#     if importlib.util.find_spec("intel_extension_for_pytorch") is None:
-#         return False
-#     _ipex_version = "N/A"
-#     try:
-#         _ipex_version = importlib.metadata.version("intel_extension_for_pytorch")
-#     except importlib.metadata.PackageNotFoundError:
-#         return False
-#     torch_major_and_minor = get_major_and_minor_from_version(_torch_version)
-#     ipex_major_and_minor = get_major_and_minor_from_version(_ipex_version)
-#     if torch_major_and_minor != ipex_major_and_minor:
-#         return False
-#     return True
-
-
 def smart_tokenizer_and_embedding_resize(
     special_tokens_dict: Dict,
     tokenizer: transformers.PreTrainedTokenizer,
@@ -84,23 +58,6 @@ def smart_tokenizer_and_embedding_resize(
 
 
 def get_accelerate_model(args, checkpoint_model_id_or_path, trainable=True):
-
-    # if torch.cuda.is_available():
-    #     n_gpus = torch.cuda.device_count()
-    # if is_ipex_available() and torch.xpu.is_available():
-    #     n_gpus = torch.xpu.device_count()
-
-    # max_memory = f"{args.max_memory_MB}MB"
-    # max_memory = {i: max_memory for i in range(n_gpus)}
-    # device_map = "auto"
-
-    # if we are in a distributed setting, we need to set the device map and max memory per device
-    # if os.environ.get("LOCAL_RANK") is not None:
-    #     local_rank = int(os.environ.get("LOCAL_RANK", "0"))
-    #     device_map = {"": local_rank}
-    #     max_memory = {"": max_memory[local_rank]}
-
-    print(f"loading base model {args.model_name_or_path}...")
     compute_dtype = (
         torch.float16 if args.precision == 'fp16' else (
             torch.bfloat16 if args.precision == 'bf16' else torch.float32)
@@ -124,26 +81,6 @@ def get_accelerate_model(args, checkpoint_model_id_or_path, trainable=True):
         trust_remote_code=args.trust_remote_code,
         use_auth_token=args.use_auth_token,
     )
-    # if compute_dtype == torch.float16 and args.bits == 4:
-    #     if torch.cuda.is_bf16_supported():
-    #         print("=" * 80)
-    #         print(
-    #             "Your GPU supports bfloat16, you can accelerate training with the argument --bf16"
-    #         )
-    #         print("=" * 80)
-
-    # if compute_dtype == torch.float16 and (
-    #     is_ipex_available() and torch.xpu.is_available()
-    # ):
-    #     compute_dtype = torch.bfloat16
-    #     print("Intel XPU does not support float16 yet, so switching to bfloat16")
-
-    # setattr(model, "model_parallel", True)
-    # setattr(model, "is_parallelizable", True)
-
-    # model.config.torch_dtype = (
-    #     torch.float16 if args.fp16 else (torch.bfloat16 if args.bf16 else torch.float32)
-    # )
 
     # Tokenizer
     tokenizer = AutoTokenizer.from_pretrained(
@@ -196,16 +133,6 @@ def get_accelerate_model(args, checkpoint_model_id_or_path, trainable=True):
             )
             model = get_peft_model(model, config)
 
-    # for name, module in model.named_modules():
-    #     if isinstance(module, LoraLayer):
-    #         if args.bf16:
-    #             module = module.to(torch.bfloat16)
-    #     if "norm" in name:
-    #         module = module.to(torch.float32)
-    #     if "lm_head" in name or "embed_tokens" in name:
-    #         if hasattr(module, "weight"):
-    #             if args.bf16 and module.weight.dtype == torch.float32:
-    #                 module = module.to(torch.bfloat16)
     return model, tokenizer
 
 
@@ -215,11 +142,6 @@ def get_weight_model(args):
         return None, None
 
     wnet_model = LMWeightNet(args.weight_model_name_or_path)
-    # weight_model = AutoModelForSequenceClassification.from_pretrained(
-    #     args.weight_model_name_or_path,
-    #     num_labels=1,
-    #     torch_dtype=torch.bfloat16,
-    # )
     wm_tokenizer = AutoTokenizer.from_pretrained(
         args.weight_model_name_or_path,
         trust_remote_code=True,

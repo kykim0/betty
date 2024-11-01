@@ -229,7 +229,7 @@ class TrainingArguments:
         default=1, metadata={"help": "Per device batch size for meta training dataset."}
     )
     meta_gradient_accumulation_steps: int = field(
-        default=4,
+        default=16,
         metadata={
             "help": "How many gradients to accumulate before to perform a meta optimizer step"
         },
