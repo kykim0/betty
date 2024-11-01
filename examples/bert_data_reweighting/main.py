@@ -4,8 +4,9 @@ import argparse
 import pandas as pd
 
 import torch
-from torch.utils.data import DataLoader
+import torch.distributed as dist
 import torch.nn.functional as F
+from torch.utils.data import DataLoader
 from transformers import get_linear_schedule_with_warmup
 
 from model import BertModel, MLP
@@ -167,10 +168,11 @@ class BERTEngine(Engine):
         if best_acc < valid_accuracy:
             best_acc = valid_accuracy
         if not args.retrain and not args.baseline:
-            torch.save(self.finetune.state_dict(), f"save/net_{self.global_step}.pt")
-            torch.save(
-                self.reweight.state_dict(), f"save/meta_net_{self.global_step}.pt"
-            )
+            if self.is_rank_zero():
+                torch.save(self.finetune.state_dict(), f"save/net_{self.global_step}.pt")
+                torch.save(
+                    self.reweight.state_dict(), f"save/meta_net_{self.global_step}.pt"
+                )
         return {"loss": valid_loss, "acc": valid_accuracy, "best_acc": best_acc}
 
 

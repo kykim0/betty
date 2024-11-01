@@ -85,6 +85,7 @@ class DataPrecessForSentence(Dataset):
 
     def __init__(self, bert_tokenizer, df, max_seq_len=50):
         super(DataPrecessForSentence, self).__init__()
+        df = df.dropna()
         self.bert_tokenizer = bert_tokenizer
         self.max_seq_len = max_seq_len
         (
