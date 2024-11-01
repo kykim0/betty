@@ -81,7 +81,7 @@ class ImplicitProblem(Problem):
         return list(self.module.parameters())
 
     def trainable_parameters(self):
-        return list(self.module.parameters())
+        return list(p for p in self.module.parameters() if p.requires_grad)
 
     def train(self):
         super().train()

@@ -3,8 +3,8 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-import sys
 import abc
+from collections import UserDict
 
 import torch
 import torch.distributed as dist
@@ -250,6 +250,7 @@ class Problem:
         Patch optimizer given the systems configuration (e.g., DDP, FSDP)
         """
         params = self.trainable_parameters()
+        assert(self._strategy != "fsdp" or len(params) < 2)
         if self.is_implemented("param_groups") and self._strategy != "fsdp":
             params = self.param_groups()
         is_zero = True if self._strategy == "zero" else False
@@ -393,7 +394,8 @@ class Problem:
 
             # logging
             if (
-                self.log_step > 0
+                self.log_step is not None
+                and self.log_step > 0
                 and self._count % self.log_step == 0
                 and self.is_rank_zero()
             ):
@@ -485,7 +487,7 @@ class Problem:
                 train_data_loader.set_epoch(self.epoch_counter[idx])
             self.train_data_iterator[idx] = iter(train_data_loader)
             batch = next(self.train_data_iterator[idx])
-        if not isinstance(batch, dict):
+        if not isinstance(batch, (dict, UserDict)):
             batch = tuple(convert_tensor(value, self.device) for value in batch)
         else:
             for key, value in batch.items():
@@ -645,6 +647,7 @@ class Problem:
         state_dict = {}
         state_dict["module"] = self.module.state_dict()
         state_dict["optimizer"] = self.optimizer.state_dict()
+        # state_dict["optimizer"] = self.optimizer.consolidate_state_dict()
         if self.scheduler is not None:
             state_dict["scheduler"] = self.scheduler.state_dict()
         if self.scaler is not None:

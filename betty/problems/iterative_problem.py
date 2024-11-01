@@ -125,7 +125,7 @@ class IterativeProblem(Problem):
         self.opitmizer_state_dict_cache = None
 
     def parameters(self):
-        return self.params
+        return list(self.module.parameters())
 
     def trainable_parameters(self):
-        return self.params
+        return list(p for p in self.module.parameters() if p.requires_grad)
